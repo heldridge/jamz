@@ -9,6 +9,9 @@ import mutagen
 def process_file(location, template, dry_run, verbose):
     path = Path(location)
 
+    if path.is_dir():
+        return None
+
     file = mutagen.File(path)
     if file is not None:
         # Mutagen can have multiple values for each tag, so we just take the first
@@ -32,10 +35,10 @@ def process_file(location, template, dry_run, verbose):
             tracknumber = first_tags["tracknumber"]
 
         if len(tracknumber) > 0:
-            first_tags["mr_padded_tracknumber"] = tracknumber.zfill(2)
+            first_tags["jamz_padded_tracknumber"] = tracknumber.zfill(2)
 
         # Add custom original suffix tag
-        first_tags["mr_original_suffix"] = path.suffix
+        first_tags["jamz_original_suffix"] = path.suffix
 
         new_name = template.format(**first_tags)
 
