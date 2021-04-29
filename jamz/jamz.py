@@ -62,7 +62,10 @@ def main():
         "template", help="The template with which to rename the audio files"
     )
     parser.add_argument(
-        "-r", "--recursive", help="Recursive descend the file tree", action="store_true"
+        "-r",
+        "--recursive",
+        help="Recursively descend the file tree",
+        action="store_true",
     )
     parser.add_argument(
         "-d",
