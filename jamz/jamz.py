@@ -50,7 +50,7 @@ def process_file(location, template, dry_run, verbose):
     return None
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(
         description="Rename audio files based on metadata tags"
     )
@@ -91,3 +91,7 @@ if __name__ == "__main__":
     else:
         print("\nRenamed the following files\n")
     print(tabulate.tabulate(rename_table, tablefmt="plain"))
+
+
+if __name__ == "__main__":
+    main()
