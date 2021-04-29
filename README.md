@@ -2,11 +2,11 @@
 
 Jamz is a small command-line utility for renaming music files based on their tags.
 
-For example, if you ran:
+For example, if you run:
 
 `jamz ~/Music/Nirvana/Nevermind/ '{jamz_padded_tracknumber} - {title}.flac'`
 
-Your Nevermind songs would now be named:
+Your Nevermind songs will now be named:
 
 ```txt
 01 - Smells Like Teen Spirit.flac
@@ -36,7 +36,7 @@ Jamz also adds a few special tags of its own. Every Jamz custom tag starts with 
 
 `jamz_padded_tracknumber`: If jamz is able to find a tracknumber tag, this will be the tracknumber padded to two digits (e.g. `2` -> `02`)
 
-`jamz_original_suffix`: This will be the original suffix of the file. For example, if the file jamz is processing is `song.flac`, this will be `.flac`.
+`jamz_original_suffix`: This will be the original suffix of the file. For example, if the file is named `song.flac`, this will be `.flac`.
 
 ### Flags
 
