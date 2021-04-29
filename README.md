@@ -8,11 +8,13 @@ For example, if you ran:
 
 Your Nevermind songs would now be named:
 
-- `01 - Smells Like Teen Spirit.flac`
-- `02 - In Bloom.flac`
-- `03 - Come as You Are.flac`
-
-etc.
+```txt
+01 - Smells Like Teen Spirit.flac
+02 - In Bloom.flac
+03 - Come as You Are.flac
+...
+12 - Something in the Way / Endless, Nameless.flac
+```
 
 ## Usage
 
@@ -20,7 +22,7 @@ Jamz takes two positional arguments, the directory to rename files in, and the t
 For the template, Jamz passes all the tags from each file as formatting arguments, so you can use any tag in your template that the filetype supports.
 For example, when working with files that use the Vorbis comment format (FLAC, Ogg, etc.), you can use TITLE, ALBUM, DATE, etc. in your template.
 
-`jamz /mymusic/ '{ARTIST} - {TITLE} - {TRACKNUMBER}.ogg`
+`jamz /mymusic/ '{ARTIST} - {TITLE} - {TRACKNUMBER}.ogg'`
 
 (Note: for this format specifically, jamz also supports using the lowercase version of each tag, e.g. "title")
 
@@ -44,4 +46,4 @@ Jamz also adds a few special tags of its own. Every Jamz custom tag will start w
 
 Jamz uses [Mutagen](https://mutagen.readthedocs.io/en/latest/) to read tags.
 All non-special tags available for use in templates come from the Mutagen tags object.
-Because Mutagen supports multiple tags per key, Jamz assumes the first value is the canonical one, and passes that to the template.
+Because Mutagen supports multiple tags per key, Jamz assumes the first value is canonical, and passes only that one to the template.
