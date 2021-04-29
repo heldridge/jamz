@@ -23,6 +23,7 @@ def process_file(location, template, dry_run, verbose):
 
             first_tags[key] = value
 
+        # Add custom padded tracknumber tag
         tracknumber = ""
         if "TRCK" in first_tags:
             # TRCK format optionally has a / to indicate the total number of tracks
@@ -32,6 +33,9 @@ def process_file(location, template, dry_run, verbose):
 
         if len(tracknumber) > 0:
             first_tags["mr_padded_tracknumber"] = tracknumber.zfill(2)
+
+        # Add custom original suffix tag
+        first_tags["mr_original_suffix"] = path.suffix
 
         new_name = template.format(**first_tags)
 
