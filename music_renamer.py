@@ -1,24 +1,12 @@
 import argparse
 import os
 from pathlib import Path
-import sys
+import tabulate
 
 import mutagen
 
 
-# def extract_tags(tags):
-#     print(type(tags))
-
-#     first_tags = []
-
-#     for key, value in tags.items():
-#         if value is list:
-#             value = value[0]
-
-#     return first_tags
-
-
-def process_file(location, template, dry_run):
+def process_file(location, template, dry_run, verbose):
     path = Path(location)
 
     file = mutagen.File(path)
@@ -47,8 +35,15 @@ def process_file(location, template, dry_run):
 
         new_name = template.format(**first_tags)
 
-        if dry_run:
-            print(new_name)
+        if not dry_run:
+            os.rename(path, path.parent / new_name)
+
+        return (path.name, new_name)
+
+    else:
+        if verbose:
+            print(f"Skipping {path.name}, no identifiable tags")
+    return None
 
 
 if __name__ == "__main__":
@@ -68,13 +63,27 @@ if __name__ == "__main__":
         help="Print the new names of the files, but don't actually rename them",
         action="store_true",
     )
+    parser.add_argument(
+        "-v", "--verbose", help="Enable verbose logging", action="store_true"
+    )
     args = parser.parse_args()
 
+    files = []
     if args.recursive:
-        for root, _, files in os.walk(args.directory):
-            for file in files:
-                process_file(os.path.join(root, file), args.template, args.dry_run)
+        for root, _, walk_files in os.walk(args.directory):
+            files += [os.path.join(root, file) for file in walk_files]
     else:
-        for entry in os.scandir(args.directory):
-            if entry.is_file():
-                process_file(entry.path, args.template, args.dry_run)
+        files = [entry.path for entry in os.scandir(args.directory)]
+
+    rename_table = []
+    for file in files:
+        result = process_file(file, args.template, args.dry_run, args.verbose)
+
+        if result is not None:
+            rename_table.append([result[0], "->", result[1]])
+
+    if args.dry_run:
+        print("\nDry run. Would have renamed the following files\n")
+    else:
+        print("\nRenamed the following files\n")
+    print(tabulate.tabulate(rename_table, tablefmt="plain"))
