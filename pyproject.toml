@@ -1,9 +1,12 @@
 [tool.poetry]
 name = "jamz"
-version = "1.0.0"
+version = "1.0.2"
 description = "Renames music files based on their tags"
 authors = ["Harry"]
 license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/heldridge/jamz"
+repository = "https://github.com/heldridge/jamz"
 
 [tool.poetry.dependencies]
 python = "^3.9"
