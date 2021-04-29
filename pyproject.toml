@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "music_renamer"
+name = "jamz"
 version = "0.1.0"
 description = "Renames music files based on their tags"
 authors = ["Harry"]
