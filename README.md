@@ -16,6 +16,10 @@ Your Nevermind songs would now be named:
 12 - Something in the Way / Endless, Nameless.flac
 ```
 
+## Installation
+
+`pip install jamz`
+
 ## Usage
 
 Jamz takes two positional arguments, the directory to rename files in, and the template with which to rename them.
