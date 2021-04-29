@@ -32,7 +32,7 @@ For example, when working with files that use the Vorbis comment format (FLAC, O
 
 ### Special Tags
 
-Jamz also adds a few special tags of its own. Every Jamz custom tag will start with `jamz`.
+Jamz also adds a few special tags of its own. Every Jamz custom tag starts with `jamz`.
 
 `jamz_padded_tracknumber`: If jamz is able to find a tracknumber tag, this will be the tracknumber padded to two digits (e.g. `2` -> `02`)
 
