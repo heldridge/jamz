@@ -41,9 +41,10 @@ Jamz also adds a few special tags of its own. Every Jamz custom tag starts with 
 ### Flags
 
 ```txt
--r, --recursive  Recursively descend the file tree
--d, --dry-run    Print the new names of the files, but don't actually rename them
--v, --verbose    Enable verbose logging
+-r, --recursive      Recursively descend the file tree
+-d, --dry-run        Print the new names of the files, but don't actually rename them
+-i, --ignore-errors  Skip over files that lead to errors
+-v, --verbose        Enable verbose logging
 ```
 
 ## Technical Details

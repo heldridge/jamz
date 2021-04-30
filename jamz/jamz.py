@@ -6,7 +6,7 @@ import tabulate
 import mutagen
 
 
-def process_file(location, template, dry_run, verbose):
+def process_file(location, template, dry_run, verbose, ignore_errors):
     path = Path(location)
 
     if path.is_dir():
@@ -40,7 +40,16 @@ def process_file(location, template, dry_run, verbose):
         # Add custom original suffix tag
         first_tags["jamz_original_suffix"] = path.suffix
 
-        new_name = template.format(**first_tags)
+        try:
+            new_name = template.format(**first_tags)
+        except Exception as e:
+            if not ignore_errors:
+                raise (e)
+            if verbose:
+                print(
+                    f"Skipping {path.name}, error applying template: {type(e).__name__}: {e}"
+                )
+            return None
 
         if not dry_run:
             os.rename(path, path.parent / new_name)
@@ -74,6 +83,12 @@ def main():
         action="store_true",
     )
     parser.add_argument(
+        "-i",
+        "--ignore-errors",
+        help="Skip over files that lead to errors",
+        action="store_true",
+    )
+    parser.add_argument(
         "-v", "--verbose", help="Enable verbose logging", action="store_true"
     )
     args = parser.parse_args()
@@ -87,7 +102,9 @@ def main():
 
     rename_table = []
     for file in files:
-        result = process_file(file, args.template, args.dry_run, args.verbose)
+        result = process_file(
+            file, args.template, args.dry_run, args.verbose, args.ignore_errors
+        )
 
         if result is not None:
             rename_table.append([result[0], "->", result[1]])
