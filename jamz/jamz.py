@@ -1,9 +1,10 @@
 import argparse
 import os
 from pathlib import Path
-import tabulate
+import textwrap
 
 import mutagen
+import tabulate
 
 
 def process_file(location, template, dry_run, verbose, ignore_errors):
@@ -63,8 +64,25 @@ def process_file(location, template, dry_run, verbose, ignore_errors):
 
 
 def main():
+    tags_table = [
+        [
+            "jamz_padded_tracknumber",
+            "The tracknumber (if found) padded to two digits (e.g. 2 -> 02)",
+        ],
+        [
+            "jamz_original_suffix",
+            "The original suffix of the file, e.g. '.flac' if the file is named 'song.flac'",
+        ],
+    ]
+
+    indented_table = textwrap.indent(
+        tabulate.tabulate(tags_table, tablefmt="plain"), "  "
+    )
+
     parser = argparse.ArgumentParser(
-        description="Rename audio files based on metadata tags"
+        description="Rename audio files based on metadata tags",
+        epilog=f"special tags:\n{indented_table}",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("directory", help="The directory to rename audio files in")
     parser.add_argument(
