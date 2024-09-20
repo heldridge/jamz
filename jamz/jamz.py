@@ -62,55 +62,7 @@ def process_file(location, template, dry_run, verbose, ignore_errors):
             print(f"Skipping {path.name}, no identifiable tags")
     return None
 
-
-def main():
-    tags_table = [
-        [
-            "jamz_padded_tracknumber",
-            "The tracknumber (if found) padded to two digits (e.g. 2 -> 02)",
-        ],
-        [
-            "jamz_original_suffix",
-            "The original suffix of the file, e.g. '.flac' if the file is named 'song.flac'",
-        ],
-    ]
-
-    indented_table = textwrap.indent(
-        tabulate.tabulate(tags_table, tablefmt="plain"), "  "
-    )
-
-    parser = argparse.ArgumentParser(
-        description="Rename audio files based on metadata tags",
-        epilog=f"special tags:\n{indented_table}",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument("directory", help="The directory to rename audio files in")
-    parser.add_argument(
-        "template", help="The template with which to rename the audio files"
-    )
-    parser.add_argument(
-        "-r",
-        "--recursive",
-        help="Recursively descend the file tree",
-        action="store_true",
-    )
-    parser.add_argument(
-        "-d",
-        "--dry-run",
-        help="Print the new names of the files, but don't actually rename them",
-        action="store_true",
-    )
-    parser.add_argument(
-        "-i",
-        "--ignore-errors",
-        help="Skip over files that lead to errors",
-        action="store_true",
-    )
-    parser.add_argument(
-        "-v", "--verbose", help="Enable verbose logging", action="store_true"
-    )
-    args = parser.parse_args()
-
+def rename(args):
     files = []
     if args.recursive:
         for root, _, walk_files in os.walk(args.directory):
@@ -133,6 +85,65 @@ def main():
         print("\nRenamed the following files\n")
     print(tabulate.tabulate(rename_table, tablefmt="plain"))
 
+
+def main():
+    tags_table = [
+        [
+            "jamz_padded_tracknumber",
+            "The tracknumber (if found) padded to two digits (e.g. 2 -> 02)",
+        ],
+        [
+            "jamz_original_suffix",
+            "The original suffix of the file, e.g. '.flac' if the file is named 'song.flac'",
+        ],
+    ]
+
+    indented_table = textwrap.indent(
+        tabulate.tabulate(tags_table, tablefmt="plain"), "  "
+    )
+
+    parser = argparse.ArgumentParser(description="CLI tools for organizing your music library")
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+    
+
+    rename_parser = subparsers.add_parser(
+        "rename",
+        help="Rename audio files based on their tags",
+        description="Rename audio files based on metadata tags",
+        epilog=f"special tags:\n{indented_table}",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    rename_parser.add_argument("directory", help="The directory to rename audio files in")
+    rename_parser.add_argument(
+        "template", help="The template with which to rename the audio files"
+    )
+    rename_parser.add_argument(
+        "-r",
+        "--recursive",
+        help="Recursively descend the file tree",
+        action="store_true",
+    )
+    rename_parser.add_argument(
+        "-d",
+        "--dry-run",
+        help="Print the new names of the files, but don't actually rename them",
+        action="store_true",
+    )
+    rename_parser.add_argument(
+        "-i",
+        "--ignore-errors",
+        help="Skip over files that lead to errors",
+        action="store_true",
+    )
+    rename_parser.add_argument(
+        "-v", "--verbose", help="Enable verbose logging", action="store_true"
+    )
+    args = parser.parse_args()
+   
+    if args.command == "rename":
+        rename(args)
+    else:
+        print(f"Unrecognized command '{args.command}'")
 
 if __name__ == "__main__":
     main()
