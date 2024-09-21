@@ -1,6 +1,8 @@
 import argparse
 import os
 from pathlib import Path
+import re
+import shutil
 import textwrap
 
 import mutagen
@@ -62,6 +64,7 @@ def process_file(location, template, dry_run, verbose, ignore_errors):
             print(f"Skipping {path.name}, no identifiable tags")
     return None
 
+
 def rename(args):
     files = []
     if args.recursive:
@@ -85,6 +88,63 @@ def rename(args):
         print("\nRenamed the following files\n")
     print(tabulate.tabulate(rename_table, tablefmt="plain"))
 
+def sanitize(s):
+    # Characters to replace
+    chars_to_replace = r'[/\\:*?"<>|]'
+    
+    # Replace problematic characters with underscore
+    sanitized = re.sub(chars_to_replace, '_', s)
+    
+    # Remove trailing spaces and periods (Windows restriction)
+    sanitized = sanitized.rstrip(' .')
+    
+    return sanitized
+
+def add(args):
+    files = []
+    if args.recursive:
+        for root, _, walk_files in os.walk(args.source_directory):
+            files += [os.path.join(root, file) for file in walk_files]
+    else:
+        files = [entry.path for entry in os.scandir(args.source_directory)]
+
+    target_directory = Path(args.target_directory)
+    movement_table = {} 
+    for file in files:
+        path = Path(file)
+
+        if path.is_dir():
+            continue
+        mutagen_file = mutagen.File(path)
+        if mutagen_file is not None:
+            tags = mutagen_file.tags
+            if 'artist' in tags:
+                artist = tags['artist'][0]
+            elif 'TPE1' in tags:
+                artist = tags['TPE1'][0]
+            else:
+                print(f"Failed to find artist for file {path}, skipping...")
+                continue
+
+            if 'album' in tags:
+                album = tags['album'][0]
+            elif 'TALB' in tags:
+                album = tags['TALB'][0]
+            else:
+                print(f"Failed to find album for file {path}, skipping...")
+                continue
+            new_path = target_directory / sanitize(artist) / sanitize(album)
+            movement_table[path] = new_path
+
+    if args.dry_run:
+        print("Dry run, would have moved the following files:")
+        for old, new in movement_table.items():
+            print(old, "-->", new)
+    else:
+        for old, new in movement_table.items():
+            os.makedirs(new, exist_ok = True)
+            shutil.move(old, new)
+
 
 def main():
     tags_table = [
@@ -102,9 +162,10 @@ def main():
         tabulate.tabulate(tags_table, tablefmt="plain"), "  "
     )
 
-    parser = argparse.ArgumentParser(description="CLI tools for organizing your music library")
+    parser = argparse.ArgumentParser(
+        description="CLI tools for organizing your music library"
+    )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
-    
 
     rename_parser = subparsers.add_parser(
         "rename",
@@ -113,7 +174,9 @@ def main():
         epilog=f"special tags:\n{indented_table}",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    rename_parser.add_argument("directory", help="The directory to rename audio files in")
+    rename_parser.add_argument(
+        "directory", help="The directory to rename audio files in"
+    )
     rename_parser.add_argument(
         "template", help="The template with which to rename the audio files"
     )
@@ -138,12 +201,39 @@ def main():
     rename_parser.add_argument(
         "-v", "--verbose", help="Enable verbose logging", action="store_true"
     )
+
+    add_parser = subparsers.add_parser(
+        "add",
+        help="Move audio files into your existing collection",
+        description="Move audio files into your existing collection",
+    )
+    add_parser.add_argument(
+        "source_directory", help="The directory to move audio files from"
+    )
+    add_parser.add_argument(
+        "target_directory", help="The directory to move audio files to"
+    )
+    add_parser.add_argument(
+        "-r",
+        "--recursive",
+        help="recursively descend the file tree",
+        action="store_true",
+    )
+    add_parser.add_argument(
+            "-d",
+            "--dry-run",
+            help="Print the locations files would be moved to, but don't actually move them",
+            action="store_true"
+            )
     args = parser.parse_args()
-   
+
     if args.command == "rename":
         rename(args)
+    elif args.command == "add":
+        add(args)
     else:
         print(f"Unrecognized command '{args.command}'")
+
 
 if __name__ == "__main__":
     main()
