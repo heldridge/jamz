@@ -1,24 +1,40 @@
-[tool.poetry]
+[project]
 name = "jamz"
 version = "1.2.1"
 description = "Renames music files based on their tags"
-authors = ["Harry"]
-license = "MIT"
+authors = [{ name = "Harry" }]
+requires-python = ">=3.9,<4"
 readme = "README.md"
-homepage = "https://github.com/heldridge/jamz"
-repository = "https://github.com/heldridge/jamz"
+license = "MIT"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+dependencies = [
+    "mutagen>=1.45.1,<2",
+    "tabulate>=0.8.9,<0.9",
+]
 
-[tool.poetry.dependencies]
-python = "^3.9"
-mutagen = "^1.45.1"
-tabulate = "^0.8.9"
+[project.urls]
+Homepage = "https://github.com/heldridge/jamz"
+Repository = "https://github.com/heldridge/jamz"
 
-[tool.poetry.dev-dependencies]
-black = "^21.4b2"
+[project.scripts]
+jamz = "jamz.jamz:main"
 
-[tool.poetry.scripts]
-jamz = 'jamz.jamz:main'
+[dependency-groups]
+dev = ["black>=21.4b2,<22"]
+
+[tool.uv]
+
+[tool.uv.build-backend]
+module-root = ""
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["uv_build>=0.9.18,<0.10.0"]
+build-backend = "uv_build"
