@@ -9,14 +9,14 @@ import mutagen
 import tabulate
 
 
-def process_file(location, template, dry_run, verbose, ignore_errors):
+def process_file(location, template, directory, dry_run, verbose, ignore_errors):
     path = Path(location)
 
     if path.is_dir():
         return None
 
     file = mutagen.File(path)
-    if file is not None:
+    if file is not None and file.tags is not None:
         # Mutagen can have multiple values for each tag, so we just take the first
         # Not all tag formats use lists for values though, so we attempt to take the
         # first, and then just fall back to using the original value
@@ -37,6 +37,15 @@ def process_file(location, template, dry_run, verbose, ignore_errors):
         elif "tracknumber" in first_tags:
             tracknumber = first_tags["tracknumber"]
 
+        if "albumartist" not in first_tags and "TPE2" in first_tags:
+            first_tags["albumartist"] = first_tags["TPE2"]
+
+        if "album" not in first_tags and "TALB" in first_tags:
+            first_tags["album"] = first_tags["TALB"]
+
+        if "title" not in first_tags and "TIT2" in first_tags:
+            first_tags["title"] = first_tags["TIT2"]
+
         if len(tracknumber) > 0:
             first_tags["jamz_padded_tracknumber"] = tracknumber.zfill(2)
 
@@ -54,8 +63,11 @@ def process_file(location, template, dry_run, verbose, ignore_errors):
                 )
             return None
 
+        dst = Path(directory) / new_name
+        dst.parent.mkdir(parents=True, exist_ok=True)
+
         if not dry_run:
-            os.rename(path, path.parent / new_name)
+            os.rename(path, dst)
 
         return (path.name, new_name)
 
@@ -76,7 +88,12 @@ def rename(args):
     rename_table = []
     for file in files:
         result = process_file(
-            file, args.template, args.dry_run, args.verbose, args.ignore_errors
+            file,
+            args.template,
+            args.directory,
+            args.dry_run,
+            args.verbose,
+            args.ignore_errors,
         )
 
         if result is not None:
@@ -88,17 +105,19 @@ def rename(args):
         print("\nRenamed the following files\n")
     print(tabulate.tabulate(rename_table, tablefmt="plain"))
 
+
 def sanitize(s):
     # Characters to replace
     chars_to_replace = r'[/\\:*?"<>|]'
-    
+
     # Replace problematic characters with underscore
-    sanitized = re.sub(chars_to_replace, '_', s)
-    
+    sanitized = re.sub(chars_to_replace, "_", s)
+
     # Remove trailing spaces and periods (Windows restriction)
-    sanitized = sanitized.rstrip(' .')
-    
+    sanitized = sanitized.rstrip(" .")
+
     return sanitized
+
 
 def add(args):
     files = []
@@ -109,7 +128,7 @@ def add(args):
         files = [entry.path for entry in os.scandir(args.source_directory)]
 
     target_directory = Path(args.target_directory)
-    movement_table = {} 
+    movement_table = {}
     for file in files:
         path = Path(file)
 
@@ -118,18 +137,18 @@ def add(args):
         mutagen_file = mutagen.File(path)
         if mutagen_file is not None:
             tags = mutagen_file.tags
-            if 'artist' in tags:
-                artist = tags['artist'][0]
-            elif 'TPE1' in tags:
-                artist = tags['TPE1'][0]
+            if "artist" in tags:
+                artist = tags["artist"][0]
+            elif "TPE1" in tags:
+                artist = tags["TPE1"][0]
             else:
                 print(f"Failed to find artist for file {path}, skipping...")
                 continue
 
-            if 'album' in tags:
-                album = tags['album'][0]
-            elif 'TALB' in tags:
-                album = tags['TALB'][0]
+            if "album" in tags:
+                album = tags["album"][0]
+            elif "TALB" in tags:
+                album = tags["TALB"][0]
             else:
                 print(f"Failed to find album for file {path}, skipping...")
                 continue
@@ -142,7 +161,7 @@ def add(args):
             print(old, "-->", new)
     else:
         for old, new in movement_table.items():
-            os.makedirs(new, exist_ok = True)
+            os.makedirs(new, exist_ok=True)
             shutil.move(old, new)
 
 
@@ -220,11 +239,11 @@ def main():
         action="store_true",
     )
     add_parser.add_argument(
-            "-d",
-            "--dry-run",
-            help="Print the locations files would be moved to, but don't actually move them",
-            action="store_true"
-            )
+        "-d",
+        "--dry-run",
+        help="Print the locations files would be moved to, but don't actually move them",
+        action="store_true",
+    )
     args = parser.parse_args()
 
     if args.command == "rename":
