@@ -7,6 +7,7 @@ import textwrap
 
 import mutagen
 import tabulate
+import pathvalidate
 
 
 def process_file(location, template, directory, dry_run, verbose, ignore_errors):
@@ -49,6 +50,9 @@ def process_file(location, template, directory, dry_run, verbose, ignore_errors)
         if len(tracknumber) > 0:
             first_tags["jamz_padded_tracknumber"] = tracknumber.zfill(2)
 
+        first_tags['jamz_sanitized_album'] = pathvalidate.sanitize_filename(first_tags['album'])
+        first_tags['jamz_sanitized_title'] = pathvalidate.sanitize_filename(first_tags['title'])
+
         # Add custom original suffix tag
         first_tags["jamz_original_suffix"] = path.suffix
 
@@ -69,7 +73,7 @@ def process_file(location, template, directory, dry_run, verbose, ignore_errors)
         if not dry_run:
             os.rename(path, dst)
 
-        return (path.name, new_name)
+        return (path, new_name)
 
     else:
         if verbose:

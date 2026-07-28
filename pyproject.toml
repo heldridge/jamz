@@ -17,6 +17,7 @@ classifiers = [
 ]
 dependencies = [
     "mutagen>=1.45.1,<2",
+    "pathvalidate>=3.3.1",
     "tabulate>=0.8.9,<0.9",
 ]
 
