@@ -1,261 +1,236 @@
 import argparse
-import os
-from pathlib import Path
-import re
-import shutil
-import textwrap
-
-import mutagen
 import tabulate
+import tomllib
+from pathlib import Path
+from typing import Optional, Union, TypeVar, Any
+from dataclasses import dataclass
+from cattrs import structure
+import os
+import mutagen
 import pathvalidate
 
+T = TypeVar("T")
 
-def process_file(location, template, directory, dry_run, verbose, ignore_errors):
-    path = Path(location)
 
-    if path.is_dir():
-        return None
+@dataclass
+class Config:
+    path_template: str
+    album_overrides: dict[str, str]
+    template_overrides: dict[str, str]
 
-    file = mutagen.File(path)
-    if file is not None and file.tags is not None:
-        # Mutagen can have multiple values for each tag, so we just take the first
-        # Not all tag formats use lists for values though, so we attempt to take the
-        # first, and then just fall back to using the original value
-        first_tags = {}
-        for key, value in file.tags.items():
-            try:
-                value = value[0]
-            except TypeError:
-                pass
 
-            first_tags[key] = value
+@dataclass
+class ErrorFile:
+    path: Path
+    exception: Exception
 
-        # Add custom padded tracknumber tag
-        tracknumber = ""
-        if "TRCK" in first_tags:
-            # TRCK format optionally has a / to indicate the total number of tracks
-            tracknumber = str(first_tags["TRCK"]).split("/")[0]
-        elif "tracknumber" in first_tags:
-            tracknumber = first_tags["tracknumber"]
 
-        if "albumartist" not in first_tags and "TPE2" in first_tags:
-            first_tags["albumartist"] = first_tags["TPE2"]
+@dataclass
+class RenameTarget:
+    source: Path
+    destination: Path
 
-        if "album" not in first_tags and "TALB" in first_tags:
-            first_tags["album"] = first_tags["TALB"]
 
-        if "title" not in first_tags and "TIT2" in first_tags:
-            first_tags["title"] = first_tags["TIT2"]
+def find_file_upwards(start_dir: Union[str, Path], filename: str) -> Optional[Path]:
+    """
+    Search for `filename` starting in `start_dir` and moving up through
+    each parent directory until it's found or the filesystem root is reached.
 
-        if len(tracknumber) > 0:
-            first_tags["jamz_padded_tracknumber"] = tracknumber.zfill(2)
+    Args:
+        start_dir: Directory to start searching from.
+        filename: Name of the file to look for.
 
-        first_tags['jamz_sanitized_album'] = pathvalidate.sanitize_filename(first_tags['album'])
-        first_tags['jamz_sanitized_title'] = pathvalidate.sanitize_filename(first_tags['title'])
+    Returns:
+        Path to the file if found, otherwise None.
+    """
+    current = Path(start_dir).resolve()
 
-        # Add custom original suffix tag
-        first_tags["jamz_original_suffix"] = path.suffix
+    if not current.is_dir():
+        raise NotADirectoryError(f"{current} is not a directory")
 
-        try:
-            new_name = template.format(**first_tags)
-        except Exception as e:
-            if not ignore_errors:
-                raise (e)
-            if verbose:
-                print(
-                    f"Skipping {path.name}, error applying template: {type(e).__name__}: {e}"
-                )
-            return None
+    for directory in [current, *current.parents]:
+        candidate = directory / filename
+        if candidate.is_file():
+            return candidate
 
-        dst = Path(directory) / new_name
-        dst.parent.mkdir(parents=True, exist_ok=True)
-
-        if not dry_run:
-            os.rename(path, dst)
-
-        return (path, new_name)
-
-    else:
-        if verbose:
-            print(f"Skipping {path.name}, no identifiable tags")
     return None
 
 
-def rename(args):
-    files = []
-    if args.recursive:
-        for root, _, walk_files in os.walk(args.directory):
-            files += [os.path.join(root, file) for file in walk_files]
-    else:
-        files = [entry.path for entry in os.scandir(args.directory)]
+def clean_disk_number(value: str) -> Optional[str]:
+    """Turn '3/12' or '3' into the int 3."""
+    value = str(value)
+    head = value.split("/")[0].strip()
+    return head if head.isdigit() else None
 
-    rename_table = []
-    for file in files:
-        result = process_file(
-            file,
-            args.template,
-            args.directory,
-            args.dry_run,
-            args.verbose,
-            args.ignore_errors,
+
+def get_first_present_key_value(d: dict[Any, T], keys: list) -> Optional[T]:
+    for k in keys:
+        if k in d:
+            return d[k]
+
+
+def get_tracknumber(tags: dict[str, str]) -> Optional[str]:
+    if "TRCK" in tags:
+        return str(tags["TRCK"]).split("/")[0]
+    elif "tracknumber" in tags:
+        return tags["tracknumber"]
+    elif "trkn" in tags:
+        return str(tags["trkn"][0])
+
+
+def get_albumartist(tags: dict[str, str]) -> Optional[str]:
+    return get_first_present_key_value(tags, ["albumartist", "TPE2", "aART"])
+
+
+def get_album(tags: dict[str, str], album_overrides: dict[str, str]) -> Optional[str]:
+
+    albumid = tags.get("jamz_musicbrainz_albumid")
+    if albumid is not None and albumid in album_overrides:
+        return album_overrides[tags["musicbrainz_albumid"]]
+
+    return get_first_present_key_value(tags, ["album", "TALB", "©alb"])
+
+
+def get_title(tags: dict[str, str]) -> Optional[str]:
+    return get_first_present_key_value(tags, ["title", "TIT2", "©nam"])
+
+
+def get_musicbrainz_albumid(tags: dict[str, str]) -> Optional[str]:
+    return get_first_present_key_value(
+        tags, ["musicbrainz_albumid", "TXXX:MusicBrainz Album Id"]
+    )
+
+
+def get_disk_number(tags: dict[str, str]) -> Optional[str]:
+    dirty_dn = get_first_present_key_value(tags, ["TPOS", "discnumber"])
+    if dirty_dn is not None:
+        return clean_disk_number(dirty_dn)
+
+
+def get_tags(f: Path, album_overrides: dict[str, str]) -> Optional[dict[str, str]]:
+    mf = mutagen.File(f)
+
+    # Base tags
+    tags: dict[str, str] = {}
+    if mf is not None:
+        if mf.tags is not None:
+            for key, value in mf.tags.items():
+                try:
+                    v_0 = value[0]
+                except TypeError:
+                    continue
+
+                tags[key] = v_0
+
+        # Custom tags
+        tags["jamz_original_suffix"] = f.suffix
+        albumid = get_musicbrainz_albumid(tags)
+        if albumid is not None:
+            tags["jamz_musicbrainz_albumid"] = albumid
+
+        tracknumber = get_tracknumber(tags)
+        if tracknumber is not None:
+            tags["jamz_padded_tracknumber"] = tracknumber.zfill(2)
+
+        albumartist = get_albumartist(tags)
+        if albumartist is not None:
+            tags["jamz_sanitized_albumartist"] = pathvalidate.sanitize_filename(
+                albumartist
+            )
+        album = get_album(tags, album_overrides)
+        if album is not None:
+            tags["jamz_sanitized_album"] = pathvalidate.sanitize_filename(album)
+
+        title = get_title(tags)
+        if title is not None:
+            tags["jamz_sanitized_title"] = pathvalidate.sanitize_filename(title)
+
+        disc_number = get_disk_number(tags)
+        if disc_number is not None:
+            tags["jamz_disc_number"] = disc_number
+
+        return tags
+
+    return None
+
+
+def run_rename(config: Config, directory: str, dry_run: bool):
+    files: list[Path] = []
+
+    for root, _, walk_files in os.walk(directory):
+        files += [Path(root) / Path(wf) for wf in walk_files]
+
+    bad_files: list[Path] = []
+    error_files: list[ErrorFile] = []
+    rename_files: list[RenameTarget] = []
+    for f in files:
+        tags = get_tags(f, config.album_overrides)
+
+        if tags is None:
+            bad_files.append(f)
+        else:
+            try:
+
+                template = config.path_template
+                albumid = tags.get("jamz_musicbrainz_albumid")
+                if albumid is not None and albumid in config.template_overrides:
+                    template = config.template_overrides[albumid]
+
+                new_path = Path(template.format(**tags))
+                rename_files.append(RenameTarget(f, new_path))
+            except Exception as e:
+                error_files.append(ErrorFile(f, e))
+
+    rename_targets: list[RenameTarget] = list(
+        filter(lambda rf: rf.destination.resolve() != rf.source.resolve(), rename_files)
+    )
+    rename_table: list[list[str]] = []
+    for rf in rename_targets:
+        rename_table.append([str(rf.source), "->", str(rf.destination)])
+
+    if len(rename_targets) > 0:
+        if dry_run:
+            print("Dry run. Would have moved the following files:")
+        else:
+            print("Moving the following files:")
+        print(tabulate.tabulate(rename_table, tablefmt="plain"))
+
+    if len(error_files) > 0:
+        print("\nSkipped the following files due to formatting errors:")
+        for ef in error_files:
+            print(ef.path, ef.exception)
+
+    if len(bad_files) > 0:
+        print(
+            "\nSkipped the following files due to not being in a recognized audio format"
         )
+        for bf in bad_files:
+            print(bf)
 
-        if result is not None:
-            rename_table.append([result[0], "->", result[1]])
-
-    if args.dry_run:
-        print("\nDry run. Would have renamed the following files\n")
-    else:
-        print("\nRenamed the following files\n")
-    print(tabulate.tabulate(rename_table, tablefmt="plain"))
-
-
-def sanitize(s):
-    # Characters to replace
-    chars_to_replace = r'[/\\:*?"<>|]'
-
-    # Replace problematic characters with underscore
-    sanitized = re.sub(chars_to_replace, "_", s)
-
-    # Remove trailing spaces and periods (Windows restriction)
-    sanitized = sanitized.rstrip(" .")
-
-    return sanitized
-
-
-def add(args):
-    files = []
-    if args.recursive:
-        for root, _, walk_files in os.walk(args.source_directory):
-            files += [os.path.join(root, file) for file in walk_files]
-    else:
-        files = [entry.path for entry in os.scandir(args.source_directory)]
-
-    target_directory = Path(args.target_directory)
-    movement_table = {}
-    for file in files:
-        path = Path(file)
-
-        if path.is_dir():
-            continue
-        mutagen_file = mutagen.File(path)
-        if mutagen_file is not None:
-            tags = mutagen_file.tags
-            if "artist" in tags:
-                artist = tags["artist"][0]
-            elif "TPE1" in tags:
-                artist = tags["TPE1"][0]
-            else:
-                print(f"Failed to find artist for file {path}, skipping...")
-                continue
-
-            if "album" in tags:
-                album = tags["album"][0]
-            elif "TALB" in tags:
-                album = tags["TALB"][0]
-            else:
-                print(f"Failed to find album for file {path}, skipping...")
-                continue
-            new_path = target_directory / sanitize(artist) / sanitize(album)
-            movement_table[path] = new_path
-
-    if args.dry_run:
-        print("Dry run, would have moved the following files:")
-        for old, new in movement_table.items():
-            print(old, "-->", new)
-    else:
-        for old, new in movement_table.items():
-            os.makedirs(new, exist_ok=True)
-            shutil.move(old, new)
+    if not dry_run:
+        for rt in rename_targets:
+            rt.destination.parent.mkdir(parents=True, exist_ok=True)
+            os.rename(rt.source, rt.destination)
 
 
 def main():
-    tags_table = [
-        [
-            "jamz_padded_tracknumber",
-            "The tracknumber (if found) padded to two digits (e.g. 2 -> 02)",
-        ],
-        [
-            "jamz_original_suffix",
-            "The original suffix of the file, e.g. '.flac' if the file is named 'song.flac'",
-        ],
-    ]
-
-    indented_table = textwrap.indent(
-        tabulate.tabulate(tags_table, tablefmt="plain"), "  "
-    )
-
     parser = argparse.ArgumentParser(
         description="CLI tools for organizing your music library"
     )
-    subparsers = parser.add_subparsers(dest="command", help="Available commands")
-
-    rename_parser = subparsers.add_parser(
-        "rename",
-        help="Rename audio files based on their tags",
-        description="Rename audio files based on metadata tags",
-        epilog=f"special tags:\n{indented_table}",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    rename_parser.add_argument(
-        "directory", help="The directory to rename audio files in"
-    )
-    rename_parser.add_argument(
-        "template", help="The template with which to rename the audio files"
-    )
-    rename_parser.add_argument(
-        "-r",
-        "--recursive",
-        help="Recursively descend the file tree",
-        action="store_true",
-    )
-    rename_parser.add_argument(
-        "-d",
-        "--dry-run",
-        help="Print the new names of the files, but don't actually rename them",
-        action="store_true",
-    )
-    rename_parser.add_argument(
-        "-i",
-        "--ignore-errors",
-        help="Skip over files that lead to errors",
-        action="store_true",
-    )
-    rename_parser.add_argument(
-        "-v", "--verbose", help="Enable verbose logging", action="store_true"
-    )
-
-    add_parser = subparsers.add_parser(
-        "add",
-        help="Move audio files into your existing collection",
-        description="Move audio files into your existing collection",
-    )
-    add_parser.add_argument(
-        "source_directory", help="The directory to move audio files from"
-    )
-    add_parser.add_argument(
-        "target_directory", help="The directory to move audio files to"
-    )
-    add_parser.add_argument(
-        "-r",
-        "--recursive",
-        help="recursively descend the file tree",
-        action="store_true",
-    )
-    add_parser.add_argument(
-        "-d",
-        "--dry-run",
-        help="Print the locations files would be moved to, but don't actually move them",
-        action="store_true",
-    )
+    parser.add_argument("directory", help="the directory to rename audio files in")
+    parser.add_argument("--dry-run", "-d", action="store_true")
     args = parser.parse_args()
 
-    if args.command == "rename":
-        rename(args)
-    elif args.command == "add":
-        add(args)
+    config_filepath = find_file_upwards(args.directory, "jamz.toml")
+    print(config_filepath)
+
+    if config_filepath is not None:
+        with open(config_filepath, "rb") as infile:
+            config = structure(tomllib.load(infile), Config)
+        run_rename(config, args.directory, args.dry_run)
+
     else:
-        print(f"Unrecognized command '{args.command}'")
+        print("No config file found. Create a `jamz.toml` in a parent directory.")
 
 
 if __name__ == "__main__":
