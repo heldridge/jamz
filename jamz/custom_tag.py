@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 import pathvalidate
 from config import Config
-from dataclasses import dataclass
 
 
 class TagCreator(ABC):

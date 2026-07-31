@@ -4,12 +4,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional, TypeVar, Union
 
+import custom_tag
 import mutagen
 import tabulate
 import tomllib
 from cattrs import structure
 from config import Config
-import custom_tag
 
 T = TypeVar("T")
 
