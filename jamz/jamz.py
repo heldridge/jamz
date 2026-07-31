@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import argparse
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, TypeVar, Union
+from typing import TypeVar
 
 import custom_tag
 import mutagen
@@ -26,8 +28,10 @@ class RenameTarget:
     destination: Path
 
 
-def find_file_upwards(start_dir: Union[str, Path], filename: str) -> Optional[Path]:
-    """Search for `filename` starting in `start_dir` and moving up through
+def find_file_upwards(start_dir: str | Path, filename: str) -> Path | None:
+    """Seaches upwards in the filetree for a file name.
+
+    Search for `filename` starting in `start_dir` and moving up through
     each parent directory until it's found or the filesystem root is reached.
 
     Args:
@@ -41,7 +45,8 @@ def find_file_upwards(start_dir: Union[str, Path], filename: str) -> Optional[Pa
     current = Path(start_dir).resolve()
 
     if not current.is_dir():
-        raise NotADirectoryError(f"{current} is not a directory")
+        message = f"{current} is not a directory"
+        raise NotADirectoryError(message)
 
     for directory in [current, *current.parents]:
         candidate = directory / filename
@@ -51,7 +56,7 @@ def find_file_upwards(start_dir: Union[str, Path], filename: str) -> Optional[Pa
     return None
 
 
-def get_tags(f: Path, config: Config) -> Optional[dict[str, str]]:
+def get_tags(f: Path, config: Config) -> dict[str, str] | None:
     mf = mutagen.File(f)
 
     # Base tags
@@ -76,7 +81,7 @@ def get_tags(f: Path, config: Config) -> Optional[dict[str, str]]:
     return None
 
 
-def run_rename(config: Config, directory: str, dry_run: bool):
+def run_rename(config: Config, directory: str, *, dry_run: bool) -> None:
     files: list[Path] = []
 
     for root, _, walk_files in os.walk(directory):
@@ -92,7 +97,6 @@ def run_rename(config: Config, directory: str, dry_run: bool):
             bad_files.append(f)
         else:
             try:
-
                 template = config.path_template
                 albumid = tags.get("jamz_musicbrainz_albumid")
                 if albumid is not None and albumid in config.template_overrides:
@@ -104,11 +108,14 @@ def run_rename(config: Config, directory: str, dry_run: bool):
                 error_files.append(ErrorFile(f, e))
 
     rename_targets: list[RenameTarget] = list(
-        filter(lambda rf: rf.destination.resolve() != rf.source.resolve(), rename_files),
+        filter(
+            lambda rf: rf.destination.resolve() != rf.source.resolve(),
+            rename_files,
+        ),
     )
-    rename_table: list[list[str]] = []
-    for rf in rename_targets:
-        rename_table.append([str(rf.source), "->", str(rf.destination)])
+    rename_table: list[list[str]] = [
+        [str(rt.source), "->", str(rt.destination)] for rt in rename_targets
+    ]
 
     if len(rename_targets) > 0:
         if dry_run:
@@ -124,7 +131,10 @@ def run_rename(config: Config, directory: str, dry_run: bool):
 
     if len(bad_files) > 0:
         print(
-            "\nSkipped the following files due to not being in a recognized audio format",
+            (
+                "\nSkipped the following files due to not being in a recognized audio "
+                "format"
+            ),
         )
         for bf in bad_files:
             print(bf)
@@ -132,10 +142,10 @@ def run_rename(config: Config, directory: str, dry_run: bool):
     if not dry_run:
         for rt in rename_targets:
             rt.destination.parent.mkdir(parents=True, exist_ok=True)
-            os.rename(rt.source, rt.destination)
+            Path.rename(rt.source, rt.destination)
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="CLI tools for organizing your music library",
     )
@@ -147,9 +157,9 @@ def main():
     print(config_filepath)
 
     if config_filepath is not None:
-        with open(config_filepath, "rb") as infile:
+        with Path.open(config_filepath, "rb") as infile:
             config = structure(tomllib.load(infile), Config)
-        run_rename(config, args.directory, args.dry_run)
+        run_rename(config, args.directory, dry_run=args.dry_run)
 
     else:
         print("No config file found. Create a `jamz.toml` in a parent directory.")

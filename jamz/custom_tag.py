@@ -1,9 +1,15 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from config import Config
 
 import pathvalidate
-from config import Config
 
 
 class TagCreator(ABC):
@@ -18,7 +24,7 @@ class TagCreator(ABC):
 
 
 class Normalizer(TagCreator):
-    def __init__(self, possible_tag_names: list[str]):
+    def __init__(self, possible_tag_names: list[str]) -> None:
         self.possible_tag_names = possible_tag_names
 
     def make_tag(
@@ -30,10 +36,11 @@ class Normalizer(TagCreator):
         for ptn in self.possible_tag_names:
             if (val := tags.get(ptn)) is not None:
                 return val
+        return None
 
 
 class Sanitizer(TagCreator):
-    def __init__(self, target: str):
+    def __init__(self, target: str) -> None:
         self.target = target
 
     def make_tag(
@@ -44,6 +51,7 @@ class Sanitizer(TagCreator):
     ) -> str | None:
         if (source_val := tags.get(self.target)) is not None:
             return pathvalidate.sanitize_filename(source_val)
+        return None
 
 
 class JamzPaddedTracknumber(TagCreator):
@@ -55,6 +63,7 @@ class JamzPaddedTracknumber(TagCreator):
             return tags["tracknumber"]
         if "trkn" in tags:
             return str(tags["trkn"][0])
+        return None
 
     def make_tag(
         self,
@@ -64,6 +73,7 @@ class JamzPaddedTracknumber(TagCreator):
     ) -> str | None:
         if (tn := self._get_tn(tags)) is not None:
             return tn.zfill(2)
+        return None
 
 
 class JamzOriginalSuffix(TagCreator):
@@ -78,15 +88,19 @@ class JamzOriginalSuffix(TagCreator):
 
 
 class JamzAlbum(TagCreator):
-    def __init__(self):
+    def __init__(self) -> None:
         self.fallback = Normalizer(["album", "TALB", "©alb"])
 
     def make_tag(
-        self, filepath: Path, tags: dict[str, str], config: Config,
+        self,
+        filepath: Path,
+        tags: dict[str, str],
+        config: Config,
     ) -> str | None:
-        if (albumid := tags.get("jamz_musicbrainz_albumid")) is not None:
-            if (override_value := config.album_overrides.get(albumid)) is not None:
-                return override_value
+        if (albumid := tags.get("jamz_musicbrainz_albumid")) is not None and (
+            override_value := config.album_overrides.get(albumid)
+        ) is not None:
+            return override_value
         return self.fallback.make_tag(filepath, tags, config)
 
 
@@ -99,12 +113,17 @@ class JamzDiscnumber(TagCreator):
         return head if head.isdigit() else None
 
     def make_tag(
-        self, filepath: Path, tags: dict[str, str], config: Config,
+        self,
+        filepath: Path,
+        tags: dict[str, str],
+        config: Config,
     ) -> str | None:
         for ptn in ["TPOS", "discnumber"]:
-            if (dirty_dn := tags.get(ptn)) is not None:
-                if (clean_dn := self._clean_disk_number(dirty_dn)) is not None:
-                    return clean_dn
+            if (dirty_dn := tags.get(ptn)) is not None and (
+                clean_dn := self._clean_disk_number(dirty_dn)
+            ) is not None:
+                return clean_dn
+        return None
 
 
 @dataclass
