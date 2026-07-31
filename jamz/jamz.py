@@ -2,7 +2,7 @@ import argparse
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, TypeVar, Union
+from typing import Optional, TypeVar, Union
 
 import custom_tag
 import mutagen
@@ -27,8 +27,7 @@ class RenameTarget:
 
 
 def find_file_upwards(start_dir: Union[str, Path], filename: str) -> Optional[Path]:
-    """
-    Search for `filename` starting in `start_dir` and moving up through
+    """Search for `filename` starting in `start_dir` and moving up through
     each parent directory until it's found or the filesystem root is reached.
 
     Args:
@@ -37,6 +36,7 @@ def find_file_upwards(start_dir: Union[str, Path], filename: str) -> Optional[Pa
 
     Returns:
         Path to the file if found, otherwise None.
+
     """
     current = Path(start_dir).resolve()
 
@@ -104,7 +104,7 @@ def run_rename(config: Config, directory: str, dry_run: bool):
                 error_files.append(ErrorFile(f, e))
 
     rename_targets: list[RenameTarget] = list(
-        filter(lambda rf: rf.destination.resolve() != rf.source.resolve(), rename_files)
+        filter(lambda rf: rf.destination.resolve() != rf.source.resolve(), rename_files),
     )
     rename_table: list[list[str]] = []
     for rf in rename_targets:
@@ -124,7 +124,7 @@ def run_rename(config: Config, directory: str, dry_run: bool):
 
     if len(bad_files) > 0:
         print(
-            "\nSkipped the following files due to not being in a recognized audio format"
+            "\nSkipped the following files due to not being in a recognized audio format",
         )
         for bf in bad_files:
             print(bf)
@@ -137,7 +137,7 @@ def run_rename(config: Config, directory: str, dry_run: bool):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="CLI tools for organizing your music library"
+        description="CLI tools for organizing your music library",
     )
     parser.add_argument("directory", help="the directory to rename audio files in")
     parser.add_argument("--dry-run", "-d", action="store_true")
