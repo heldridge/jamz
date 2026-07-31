@@ -1,22 +1,17 @@
 import argparse
+import os
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Optional, TypeVar, Union
+
+import mutagen
 import tabulate
 import tomllib
-from pathlib import Path
-from typing import Optional, Union, TypeVar, Any
-from dataclasses import dataclass
 from cattrs import structure
-import os
-import mutagen
-import pathvalidate
+from config import Config
+import custom_tag
 
 T = TypeVar("T")
-
-
-@dataclass
-class Config:
-    path_template: str
-    album_overrides: dict[str, str]
-    template_overrides: dict[str, str]
 
 
 @dataclass
@@ -56,58 +51,7 @@ def find_file_upwards(start_dir: Union[str, Path], filename: str) -> Optional[Pa
     return None
 
 
-def clean_disk_number(value: str) -> Optional[str]:
-    """Turn '3/12' or '3' into the int 3."""
-    value = str(value)
-    head = value.split("/")[0].strip()
-    return head if head.isdigit() else None
-
-
-def get_first_present_key_value(d: dict[Any, T], keys: list) -> Optional[T]:
-    for k in keys:
-        if k in d:
-            return d[k]
-
-
-def get_tracknumber(tags: dict[str, str]) -> Optional[str]:
-    if "TRCK" in tags:
-        return str(tags["TRCK"]).split("/")[0]
-    elif "tracknumber" in tags:
-        return tags["tracknumber"]
-    elif "trkn" in tags:
-        return str(tags["trkn"][0])
-
-
-def get_albumartist(tags: dict[str, str]) -> Optional[str]:
-    return get_first_present_key_value(tags, ["albumartist", "TPE2", "aART"])
-
-
-def get_album(tags: dict[str, str], album_overrides: dict[str, str]) -> Optional[str]:
-
-    albumid = tags.get("jamz_musicbrainz_albumid")
-    if albumid is not None and albumid in album_overrides:
-        return album_overrides[tags["musicbrainz_albumid"]]
-
-    return get_first_present_key_value(tags, ["album", "TALB", "©alb"])
-
-
-def get_title(tags: dict[str, str]) -> Optional[str]:
-    return get_first_present_key_value(tags, ["title", "TIT2", "©nam"])
-
-
-def get_musicbrainz_albumid(tags: dict[str, str]) -> Optional[str]:
-    return get_first_present_key_value(
-        tags, ["musicbrainz_albumid", "TXXX:MusicBrainz Album Id"]
-    )
-
-
-def get_disk_number(tags: dict[str, str]) -> Optional[str]:
-    dirty_dn = get_first_present_key_value(tags, ["TPOS", "discnumber"])
-    if dirty_dn is not None:
-        return clean_disk_number(dirty_dn)
-
-
-def get_tags(f: Path, album_overrides: dict[str, str]) -> Optional[dict[str, str]]:
+def get_tags(f: Path, config: Config) -> Optional[dict[str, str]]:
     mf = mutagen.File(f)
 
     # Base tags
@@ -123,31 +67,9 @@ def get_tags(f: Path, album_overrides: dict[str, str]) -> Optional[dict[str, str
                 tags[key] = v_0
 
         # Custom tags
-        tags["jamz_original_suffix"] = f.suffix
-        albumid = get_musicbrainz_albumid(tags)
-        if albumid is not None:
-            tags["jamz_musicbrainz_albumid"] = albumid
-
-        tracknumber = get_tracknumber(tags)
-        if tracknumber is not None:
-            tags["jamz_padded_tracknumber"] = tracknumber.zfill(2)
-
-        albumartist = get_albumartist(tags)
-        if albumartist is not None:
-            tags["jamz_sanitized_albumartist"] = pathvalidate.sanitize_filename(
-                albumartist
-            )
-        album = get_album(tags, album_overrides)
-        if album is not None:
-            tags["jamz_sanitized_album"] = pathvalidate.sanitize_filename(album)
-
-        title = get_title(tags)
-        if title is not None:
-            tags["jamz_sanitized_title"] = pathvalidate.sanitize_filename(title)
-
-        disc_number = get_disk_number(tags)
-        if disc_number is not None:
-            tags["jamz_disc_number"] = disc_number
+        for ct in custom_tag.default_custom_tags:
+            if (val := ct.creator.make_tag(f, tags, config)) is not None:
+                tags[ct.name] = val
 
         return tags
 
@@ -164,7 +86,7 @@ def run_rename(config: Config, directory: str, dry_run: bool):
     error_files: list[ErrorFile] = []
     rename_files: list[RenameTarget] = []
     for f in files:
-        tags = get_tags(f, config.album_overrides)
+        tags = get_tags(f, config)
 
         if tags is None:
             bad_files.append(f)

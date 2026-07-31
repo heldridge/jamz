@@ -30,9 +30,7 @@ Repository = "https://github.com/heldridge/jamz"
 jamz = "jamz.jamz:main"
 
 [dependency-groups]
-dev = [
-    "black>=21.4b2,<22",
-]
+dev = []
 
 [tool.uv]
 
