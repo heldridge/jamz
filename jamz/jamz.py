@@ -2,15 +2,18 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from dataclasses import dataclass
+from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 from typing import TypeVar
 
-import custom_tag
 import mutagen
 import tabulate
 import tomllib
 from cattrs import structure
+
+import custom_tag
 from config import Config
 
 T = TypeVar("T")
@@ -26,6 +29,17 @@ class ErrorFile:
 class RenameTarget:
     source: Path
     destination: Path
+
+
+def import_file(module_name: str, path: str):
+    spec = spec_from_file_location(module_name, path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Could not load {path}")
+
+    module = module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def find_file_upwards(start_dir: str | Path, filename: str) -> Path | None:
@@ -56,7 +70,9 @@ def find_file_upwards(start_dir: str | Path, filename: str) -> Path | None:
     return None
 
 
-def get_tags(f: Path, config: Config) -> dict[str, str] | None:
+def get_tags(
+    f: Path, config: Config, user_tags: list[custom_tag.CustomTag]
+) -> dict[str, str] | None:
     mf = mutagen.File(f)
 
     # Base tags
@@ -72,7 +88,7 @@ def get_tags(f: Path, config: Config) -> dict[str, str] | None:
                 tags[key] = v_0
 
         # Custom tags
-        for ct in custom_tag.default_custom_tags:
+        for ct in custom_tag.default_custom_tags + user_tags:
             if (val := ct.creator.make_tag(f, tags, config)) is not None:
                 tags[ct.name] = val
 
@@ -81,7 +97,13 @@ def get_tags(f: Path, config: Config) -> dict[str, str] | None:
     return None
 
 
-def run_rename(config: Config, directory: str, *, dry_run: bool) -> None:
+def run_rename(
+    config: Config,
+    user_tags: list[custom_tag.CustomTag],
+    directory: str,
+    *,
+    dry_run: bool,
+) -> None:
     files: list[Path] = []
 
     for root, _, walk_files in os.walk(directory):
@@ -91,7 +113,7 @@ def run_rename(config: Config, directory: str, *, dry_run: bool) -> None:
     error_files: list[ErrorFile] = []
     rename_files: list[RenameTarget] = []
     for f in files:
-        tags = get_tags(f, config)
+        tags = get_tags(f, config, user_tags)
 
         if tags is None:
             bad_files.append(f)
@@ -151,6 +173,7 @@ def main() -> None:
     )
     parser.add_argument("directory", help="the directory to rename audio files in")
     parser.add_argument("--dry-run", "-d", action="store_true")
+    parser.add_argument("--plugins", "-p", type=str, nargs="*")
     args = parser.parse_args()
 
     config_filepath = find_file_upwards(args.directory, "jamz.toml")
@@ -159,7 +182,15 @@ def main() -> None:
     if config_filepath is not None:
         with Path.open(config_filepath, "rb") as infile:
             config = structure(tomllib.load(infile), Config)
-        run_rename(config, args.directory, dry_run=args.dry_run)
+
+        user_tags = []
+
+        if (plugin_paths := args.plugins) is not None:
+            for i, plugin_path in enumerate(plugin_paths):
+                m = import_file(f"user_plugin_{i}", plugin_path)
+                user_tags += m.custom_tags
+
+        run_rename(config, user_tags, args.directory, dry_run=args.dry_run)
 
     else:
         print("No config file found. Create a `jamz.toml` in a parent directory.")
