@@ -154,7 +154,7 @@ def main() -> None:
     args = parser.parse_args()
 
     config_filepath = find_file_upwards(args.directory, "jamz.toml")
-    print(config_filepath)
+    print("Using config at:", config_filepath)
 
     if config_filepath is not None:
         with Path.open(config_filepath, "rb") as infile:
